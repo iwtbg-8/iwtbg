@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP 405 Error Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .method-get { background: #28a745; color: white; }
+        .method-post { background: #007bff; color: white; }
+        .method-wrong { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🔧 HTTP 405 Error Fix Test</h1>
+    <p>Testing proper handling of HTTP method mismatches (405 Method Not Allowed errors)</p>
+
+    <div class="test-section">
+        <h2>Test 1: API Info (Correct - GET)</h2>
+        <p><span class="method-badge method-get">GET</span> <code>/api</code></p>
+        <button onclick="testApiInfo()">✓ Test GET /api (Should Work)</button>
+        <div id="result1" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Analyze Endpoint - Wrong Method</h2>
+        <p><span class="method-badge method-post">POST</span> <code>/api/analyze</code> (requires POST)</p>
+        <button class="danger" onclick="testAnalyzeGET()">✗ Try GET /api/analyze (Should Fail 405)</button>
+        <button onclick="testAnalyzePOST()">✓ Try POST /api/analyze (Should Work)</button>
+        <div id="result2" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Download Endpoint - Wrong Method</h2>
+        <p><span class="method-badge method-post">POST</span> <code>/api/download</code> (requires POST)</p>
+        <button class="danger" onclick="testDownloadGET()">✗ Try GET /api/download (Should Fail 405)</button>
+        <button onclick="testDownloadPOST()">✓ Try POST /api/download (Should Work)</button>
+        <div id="result3" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: CORS Preflight (OPTIONS)</h2>
+        <p><span class="method-badge method-post">OPTIONS</span> CORS preflight requests</p>
+        <button onclick="testOptionsPreflight()">Test OPTIONS /api/analyze</button>
+        <div id="result4" class="result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+
+        // Helper function to safely parse JSON responses
+        async function safeJsonParse(response) {
+            if (!response.ok) {
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const text = await response.text();
+                    if (text) {
+                        const errorData = JSON.parse(text);
+                        errorMessage = errorData.error || errorMessage;
+                        if (errorData.message) errorMessage += `\n${errorData.message}`;
+                        if (errorData.allowed_methods) errorMessage += `\nAllowed: ${errorData.allowed_methods.join(', ')}`;
+                    }
+                } catch (parseError) {
+                    // Response is not JSON or empty, use status text
+                }
+                throw new Error(errorMessage);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                if (!text) return null;
+                throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`);
+            }
+
+            const text = await response.text();
+            if (!text || text.trim() === '') {
+                throw new Error('Server returned empty response');
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch (parseError) {
+                throw new Error(`Invalid JSON response: ${parseError.message}`);
+            }
+        }
+
+        function showResult(elementId, message, type) {
+            const elem = document.getElementById(elementId);
+            elem.textContent = message;
+            elem.className = `result ${type}`;
+        }
+
+        async function testApiInfo() {
+            const resultId = 'result1';
+            showResult(resultId, 'Testing GET /api...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api`);
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ SUCCESS!\nStatus: ${response.status}\n\n${JSON.stringify(data, null, 2)}`, 'success');
+            } catch (error) {
+                showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAnalyzeGET() {
+            const resultId = 'result2';
+            showResult(resultId, 'Testing GET /api/analyze (wrong method)...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/analyze`); // GET by default
+                const data = await safeJsonParse(response);
+                showResult(resultId, `Unexpected success:\n${JSON.stringify(data, null, 2)}`, 'warning');
+            } catch (error) {
+                if (error.message.includes('405')) {
+                    showResult(resultId, `✓ CORRECTLY REJECTED!\n${error.message}\n\nThis is expected behavior - the endpoint requires POST.`, 'success');
+                } else {
+                    showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testAnalyzePOST() {
+            const resultId = 'result2';
+            showResult(resultId, 'Testing POST /api/analyze (correct method)...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
+                });
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ SUCCESS!\nStatus: ${response.status}\nTitle: ${data.title || 'Analyzing...'}`, 'success');
+            } catch (error) {
+                showResult(resultId, `Error (expected for demo URLs): ${error.message}`, 'warning');
+            }
+        }
+
+        async function testDownloadGET() {
+            const resultId = 'result3';
+            showResult(resultId, 'Testing GET /api/download (wrong method)...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/download`);
+                const data = await safeJsonParse(response);
+                showResult(resultId, `Unexpected success:\n${JSON.stringify(data, null, 2)}`, 'warning');
+            } catch (error) {
+                if (error.message.includes('405')) {
+                    showResult(resultId, `✓ CORRECTLY REJECTED!\n${error.message}\n\nThis is expected behavior - the endpoint requires POST.`, 'success');
+                } else {
+                    showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testDownloadPOST() {
+            const resultId = 'result3';
+            showResult(resultId, 'Testing POST /api/download (correct method)...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/download`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        quality: '720p'
+                    })
+                });
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ REQUEST ACCEPTED!\nStatus: ${response.status}\n(Note: May fail without valid video, but method is correct)`, 'success');
+            } catch (error) {
+                showResult(resultId, `Request sent correctly, server response: ${error.message}`, 'warning');
+            }
+        }
+
+        async function testOptionsPreflight() {
+            const resultId = 'result4';
+            showResult(resultId, 'Testing OPTIONS /api/analyze (CORS preflight)...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/analyze`, {
+                    method: 'OPTIONS'
+                });
+                
+                const headers = {};
+                response.headers.forEach((value, key) => {
+                    if (key.toLowerCase().includes('cors') || key.toLowerCase().includes('access-control')) {
+                        headers[key] = value;
+                    }
+                });
+                
+                if (response.ok) {
+                    showResult(resultId, `✓ OPTIONS REQUEST SUCCESSFUL!\nStatus: ${response.status}\n\nCORS Headers:\n${JSON.stringify(headers, null, 2)}`, 'success');
+                } else {
+                    showResult(resultId, `Status: ${response.status}\nHeaders:\n${JSON.stringify(headers, null, 2)}`, 'warning');
+                }
+            } catch (error) {
+                showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

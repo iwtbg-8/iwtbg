@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Error Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <h1>JSON Error Fix Test</h1>
+    <p>This page tests the fix for "Failed to execute 'json' on 'Response': Unexpected end of JSON input"</p>
+
+    <div class="test-section">
+        <h2>Test 1: Valid JSON Response</h2>
+        <button onclick="testApiStatus()">Test API Status</button>
+        <div id="result1" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Analyze Video (Valid URL)</h2>
+        <input type="text" id="videoUrl" placeholder="Enter YouTube URL" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+        <button onclick="testAnalyze()">Test Analyze</button>
+        <div id="result2" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Non-existent Endpoint (Should handle gracefully)</h2>
+        <button onclick="testNonExistent()">Test Non-existent Endpoint</button>
+        <div id="result3" class="result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+
+        // Helper function to safely parse JSON responses (same as in script.js)
+        async function safeJsonParse(response) {
+            // Check if response is ok first
+            if (!response.ok) {
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const text = await response.text();
+                    if (text) {
+                        const errorData = JSON.parse(text);
+                        errorMessage = errorData.error || errorMessage;
+                    }
+                } catch (parseError) {
+                    // Response is not JSON or empty, use status text
+                }
+                throw new Error(errorMessage);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`);
+            }
+
+            const text = await response.text();
+            if (!text || text.trim() === '') {
+                throw new Error('Server returned empty response');
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch (parseError) {
+                throw new Error(`Invalid JSON response: ${parseError.message}`);
+            }
+        }
+
+        function showResult(elementId, message, type) {
+            const elem = document.getElementById(elementId);
+            elem.textContent = message;
+            elem.className = `result ${type}`;
+        }
+
+        async function testApiStatus() {
+            const resultId = 'result1';
+            showResult(resultId, 'Testing...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api`);
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ SUCCESS!\n${JSON.stringify(data, null, 2)}`, 'success');
+            } catch (error) {
+                showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAnalyze() {
+            const resultId = 'result2';
+            const url = document.getElementById('videoUrl').value;
+            
+            if (!url) {
+                showResult(resultId, '✗ Please enter a video URL', 'error');
+                return;
+            }
+
+            showResult(resultId, 'Analyzing...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ SUCCESS!\nTitle: ${data.title}\nDuration: ${data.duration}s\nFormats available: ${data.formats?.length || 0}`, 'success');
+            } catch (error) {
+                showResult(resultId, `✗ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        async function testNonExistent() {
+            const resultId = 'result3';
+            showResult(resultId, 'Testing...', 'info');
+            try {
+                const response = await fetch(`${API_URL}/api/nonexistent`);
+                const data = await safeJsonParse(response);
+                showResult(resultId, `✓ Got response (unexpected):\n${JSON.stringify(data, null, 2)}`, 'info');
+            } catch (error) {
+                showResult(resultId, `✓ Handled gracefully: ${error.message}`, 'success');
+            }
+        }
+    </script>
+</body>
+</html>
