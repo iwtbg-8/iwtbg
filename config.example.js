@@ -15,7 +15,7 @@ const API_URL = window.location.origin.includes('localhost') || window.location.
     : BACKEND_URL;              // Production (Render.com)
 
 // Example:
-// const BACKEND_URL = 'https://iwtbg-backend.onrender.com';
+// const BACKEND_URL = 'https://iwtbg.onrender.com';
 
 // ============================================
 // After changing, commit and push:

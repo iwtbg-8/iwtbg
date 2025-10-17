@@ -26,7 +26,7 @@ Go to: **https://render.com** → Sign up → New Web Service
 
 Click "Create Web Service" and **copy your URL**:
 ```
-Example: https://iwtbg-backend.onrender.com
+Example: https://iwtbg.onrender.com
 ```
 
 ### 2. Update script.js
@@ -44,7 +44,7 @@ const API_URL = window.location.origin.includes('localhost')
 ```javascript
 const API_URL = window.location.origin.includes('localhost') 
     ? window.location.origin 
-    : 'https://iwtbg-backend.onrender.com';  // ✅ Your Render URL
+   : 'https://iwtbg.onrender.com';  // ✅ Your Render URL
 ```
 
 ### 3. Commit and Push
@@ -64,7 +64,7 @@ Render will auto-deploy your backend.
 
 1. **Test Backend** (wait 2-3 minutes after Render deployment):
    ```bash
-   curl https://iwtbg-backend.onrender.com/api
+   curl https://iwtbg.onrender.com/api
    ```
    Should return JSON with API info.
 

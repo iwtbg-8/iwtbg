@@ -39,7 +39,7 @@ Deploy backend to **Render.com** (free tier) and frontend to **GitHub Pages**.
 5. **Deploy**
    - Click "Create Web Service"
    - Wait 5-10 minutes for first deployment
-   - You'll get a URL like: `https://iwtbg-backend.onrender.com`
+   - You'll get a URL like: `https://iwtbg.onrender.com`
 
 ### Part 2: Update Frontend for Production
 
@@ -54,8 +54,8 @@ Deploy backend to **Render.com** (free tier) and frontend to **GitHub Pages**.
    
    // NEW (works with Render backend):
    const API_URL = window.location.origin.includes('localhost') 
-       ? window.location.origin 
-       : 'https://iwtbg-backend.onrender.com';  // Your Render URL
+      ? window.location.origin 
+      : 'https://iwtbg.onrender.com';  // Your Render URL
    ```
 
 7. **Commit and Push Changes**
@@ -106,7 +106,7 @@ Deploy backend to **Render.com** (free tier) and frontend to **GitHub Pages**.
 
 1. **Test Backend** (wait for Render deployment):
    ```bash
-   curl https://iwtbg-backend.onrender.com/api
+   curl https://iwtbg.onrender.com/api
    ```
    Should return API info JSON.
 

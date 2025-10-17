@@ -9,6 +9,8 @@ from urllib.parse import urlparse, quote
 from pathlib import Path
 from datetime import datetime
 import hashlib
+import time
+from collections import deque
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +44,14 @@ CORS(app, resources={
 MAX_FILESIZE = 500 * 1024 * 1024  # 500MB max file size
 ALLOWED_DOMAINS = []  # Empty means all domains allowed
 DOWNLOAD_DIR = os.path.join(os.getcwd(), 'downloads')
+CACHE_TTL = 6 * 3600  # 6 hours for analyze/formats cache
+RATE_LIMIT_WINDOW = 10 * 60  # 10 minutes
+RATE_LIMIT_MAX = 20  # Max 20 requests per IP per window
+
+# In-memory caches and rate limit storage
+analyze_cache = {}  # url -> (timestamp, data)
+formats_cache = {}  # url -> (timestamp, data)
+rate_limit_map = {}  # ip -> deque[timestamps]
 
 # Create downloads directory if it doesn't exist
 if not os.path.exists(DOWNLOAD_DIR):
@@ -127,6 +137,29 @@ def sanitize_filename(filename):
     
     return filename
 
+def get_client_ip():
+    """Get client IP considering proxies (X-Forwarded-For)."""
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        # Take the first IP in the list
+        return xff.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
+def is_rate_limited(ip):
+    """Basic fixed-window rate limiter using a sliding deque."""
+    now = time.time()
+    dq = rate_limit_map.get(ip)
+    if dq is None:
+        dq = deque()
+        rate_limit_map[ip] = dq
+    # Evict old timestamps
+    while dq and now - dq[0] > RATE_LIMIT_WINDOW:
+        dq.popleft()
+    if len(dq) >= RATE_LIMIT_MAX:
+        return True
+    dq.append(now)
+    return False
+
 # ============================================================================
 # ROUTES
 # ============================================================================
@@ -181,6 +214,11 @@ def analyze_video():
         return method_not_allowed(None)
     
     try:
+        # Rate limiting
+        client_ip = get_client_ip()
+        if is_rate_limited(client_ip):
+            return jsonify({'error': 'Too many requests. Please try again later.'}), 429
+
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Invalid JSON data'}), 400
@@ -198,7 +236,15 @@ def analyze_video():
         if len(url) > 2048:
             return jsonify({'error': 'URL too long'}), 400
         
-        logger.info(f"Analyzing URL: {url[:100]}...")
+        logger.info(f"Analyzing URL: {url[:100]}... (ip={client_ip})")
+
+        # Cache check
+        cached = analyze_cache.get(url)
+        if cached:
+            ts, payload = cached
+            if time.time() - ts < CACHE_TTL:
+                logger.info("Returning cached analysis result")
+                return jsonify(payload)
         
         # yt-dlp options for extracting info only with proper headers
         ydl_opts = {
@@ -219,6 +265,8 @@ def analyze_video():
                     'skip': ['dash']
                 }
             },
+            'noplaylist': True,
+            'geo_bypass': True,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -253,7 +301,7 @@ def analyze_video():
             
             logger.info(f"Successfully analyzed: {title}")
             
-            return jsonify({
+            payload = {
                 'success': True,
                 'title': title,
                 'thumbnail': info.get('thumbnail', ''),
@@ -262,7 +310,10 @@ def analyze_video():
                 'view_count': info.get('view_count', 0),
                 'formats': formats[:6],  # Return top 6 quality options
                 'description': description
-            })
+            }
+            # Store in cache
+            analyze_cache[url] = (time.time(), payload)
+            return jsonify(payload)
             
     except yt_dlp.utils.DownloadError as e:
         logger.error(f"Download error: {e}")
@@ -289,6 +340,11 @@ def get_formats():
         return method_not_allowed(None)
     
     try:
+        # Rate limiting
+        client_ip = get_client_ip()
+        if is_rate_limited(client_ip):
+            return jsonify({'error': 'Too many requests. Please try again later.'}), 429
+
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Invalid JSON data'}), 400
@@ -301,7 +357,15 @@ def get_formats():
         if not is_valid_url(url):
             return jsonify({'error': 'Invalid URL format'}), 400
         
-        logger.info(f"Fetching formats for: {url[:100]}...")
+        logger.info(f"Fetching formats for: {url[:100]}... (ip={client_ip})")
+
+        # Cache check
+        cached = formats_cache.get(url)
+        if cached:
+            ts, payload = cached
+            if time.time() - ts < CACHE_TTL:
+                logger.info("Returning cached formats result")
+                return jsonify(payload)
         
         ydl_opts = {
             'quiet': True,
@@ -320,6 +384,8 @@ def get_formats():
                     'skip': ['dash']
                 }
             },
+            'noplaylist': True,
+            'geo_bypass': True,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -351,11 +417,14 @@ def get_formats():
                     format_info['abr'] = f.get('abr')
                     audio_formats.append(format_info)
             
-            return jsonify({
+            payload = {
                 'success': True,
                 'video_formats': video_formats,
                 'audio_formats': audio_formats
-            })
+            }
+            # Store in cache
+            formats_cache[url] = (time.time(), payload)
+            return jsonify(payload)
             
     except Exception as e:
         logger.error(f"Error in get_formats: {e}")

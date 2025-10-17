@@ -12,7 +12,7 @@
    - **Start Command**: `python server_production.py`
    - **Instance Type**: Free
 5. Click "Create Web Service"
-6. **Copy your Render URL** (e.g., `https://iwtbg-backend.onrender.com`)
+6. **Copy your Render URL** (e.g., `https://iwtbg.onrender.com`)
 
 ### Step 2: Update Frontend API URL
 
