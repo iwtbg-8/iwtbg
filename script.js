@@ -2,10 +2,10 @@
 // Backend API Integration
 
 // API Configuration
-// Use relative URLs when served from same origin, fallback to localhost
+// Use relative URLs when served from same origin, fallback to production backend
 const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
     ? window.location.origin 
-    : 'http://localhost:5000';
+    : 'https://iwtbg.onrender.com';  // Production backend on Render.com
 
 document.addEventListener('DOMContentLoaded', function() {
     // DOM Elements
