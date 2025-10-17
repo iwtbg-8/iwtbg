@@ -282,7 +282,7 @@ def analyze_video():
                     break  # Success, exit retry loop
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e)
-                if 'Sign in to confirm you're not a bot' in msg or 'not a bot' in msg:
+                if "Sign in to confirm you're not a bot" in msg or 'not a bot' in msg:
                     if attempt < max_retries:
                         wait_time = (2 ** attempt) + (attempt * 2)  # More aggressive backoff
                         logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, waiting {wait_time}s before retry...")
