@@ -4,7 +4,7 @@ A professional, production-ready video downloader website (iwtbg) that supports 
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/iwtbg)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-production--ready-brightgreen.svg)](BUGFIXES.md)
+[![Status](https://img.shields.io/badge/status-production--ready-brightgreen.svg)](docs/bugfixes/BUGFIXES.md)
 
 ## 🌟 Features
 
@@ -36,7 +36,7 @@ A professional, production-ready video downloader website (iwtbg) that supports 
 
 ### For Developers
 
-See [SETUP.md](SETUP.md) for detailed installation instructions.
+See [SETUP.md](docs/SETUP.md) for detailed installation instructions.
 
 ## 📋 Supported Platforms
 
@@ -77,7 +77,7 @@ See [SETUP.md](SETUP.md) for detailed installation instructions.
 
 **Current Status**: ✅ **PRODUCTION READY**
 
-All bugs fixed and security hardened! See [BUGFIXES.md](BUGFIXES.md) for details.
+All bugs fixed and security hardened! See [BUGFIXES.md](docs/bugfixes/BUGFIXES.md) for details.
 
 ### Security Fixes ✅
 - [x] Directory traversal prevention
@@ -95,7 +95,7 @@ All bugs fixed and security hardened! See [BUGFIXES.md](BUGFIXES.md) for details
 - [x] Socket timeout prevention
 - [x] Null/undefined checks
 
-See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for deployment readiness.
+See [RELEASE_CHECKLIST.md](docs/checklists/RELEASE_CHECKLIST.md) for deployment readiness.
 
 
 ## 📦 Installation
@@ -119,7 +119,7 @@ The script will:
 
 ### Manual Installation
 
-See [SETUP.md](SETUP.md) for detailed manual installation steps.
+See [SETUP.md](docs/SETUP.md) for detailed manual installation steps.
 
 ## 🎯 Usage
 
@@ -152,7 +152,7 @@ The backend exposes these REST API endpoints:
 - `GET /api/file/<filename>` - Serve downloaded file
 - `GET /health` - Health check
 
-See [PRODUCTION.md](PRODUCTION.md) for API documentation.
+See [PRODUCTION.md](docs/deployment/PRODUCTION.md) for API documentation.
 
 ## 🔒 Security Features
 
@@ -199,7 +199,7 @@ When deploying to production:
 - ✅ Monitor error logs
 - ✅ Update dependencies regularly
 
-See [PRODUCTION.md](PRODUCTION.md) for deployment security guide.
+See [PRODUCTION.md](docs/deployment/PRODUCTION.md) for deployment security guide.
 
 ## 🐛 Troubleshooting
 
@@ -225,7 +225,7 @@ python3 --version
 - Check browser console for errors
 - Verify file exists in `downloads/` folder
 
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for comprehensive solutions.
+See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for comprehensive solutions.
 
 ## 📊 Logging
 
@@ -367,7 +367,7 @@ docker run -p 5000:5000 iwtbg
 - Google Cloud Run
 - Railway
 
-See [PRODUCTION.md](PRODUCTION.md) for detailed deployment guides.
+See [PRODUCTION.md](docs/deployment/PRODUCTION.md) for detailed deployment guides.
 
 ## 🔧 Configuration
 
@@ -553,7 +553,7 @@ If you find this project useful, please consider giving it a ⭐ on GitHub!
 
 **Made with ❤️ by the open-source community**
 
-[Report Bug](https://github.com/yourusername/iwtbg/issues) · [Request Feature](https://github.com/yourusername/iwtbg/issues) · [Documentation](PRODUCTION.md)
+[Report Bug](https://github.com/yourusername/iwtbg/issues) · [Request Feature](https://github.com/yourusername/iwtbg/issues) · [Documentation](docs/README.md)
 
 </div>
 
