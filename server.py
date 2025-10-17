@@ -245,6 +245,39 @@ def analyze_video():
             if time.time() - ts < CACHE_TTL:
                 logger.info("Returning cached analysis result")
                 return jsonify(payload)
+
+        # Retry mechanism for anti-bot issues
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    break  # Success, exit retry loop
+            except yt_dlp.utils.DownloadError as e:
+                msg = str(e)
+                if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
+                    if attempt < max_retries:
+                        logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, retrying...")
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    else:
+                        msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
+                        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
+                else:
+                    # Other errors, don't retry
+                    logger.error(f"Download error: {e}")
+                    return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
+            except Exception as e:
+                logger.error(f"Unexpected error in analyze_video: {e}")
+                return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
+
+        # Cache check
+        cached = analyze_cache.get(url)
+        if cached:
+            ts, payload = cached
+            if time.time() - ts < CACHE_TTL:
+                logger.info("Returning cached analysis result")
+                return jsonify(payload)
         
         # yt-dlp options for extracting info only with proper headers
         ydl_opts = {
@@ -261,12 +294,15 @@ def analyze_video():
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
-                    'skip': ['dash']
+                    'player_client': ['android', 'web', 'ios'],
+                    'skip': ['dash'],
+                    'player_skip': ['js']
                 }
             },
             'noplaylist': True,
             'geo_bypass': True,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -380,12 +416,15 @@ def get_formats():
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
-                    'skip': ['dash']
+                    'player_client': ['android', 'web', 'ios'],
+                    'skip': ['dash'],
+                    'player_skip': ['js']
                 }
             },
             'noplaylist': True,
             'geo_bypass': True,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
