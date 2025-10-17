@@ -249,20 +249,31 @@ def analyze_video():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            'socket_timeout': 60,  # Increased from 30 to 60 seconds
+            'socket_timeout': 60,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['hls', 'dash', 'translated_subs']
+                }
+            },
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
             },
             'noplaylist': True,
             'geo_bypass': True,
+            'sleep_interval': 2,
+            'max_sleep_interval': 5,
         }
 
         # Retry mechanism for anti-bot issues
-        max_retries = 5  # Increased from 2 to 5
+        max_retries = 5
         info = None
         for attempt in range(max_retries + 1):
             try:
@@ -271,22 +282,28 @@ def analyze_video():
                     break  # Success, exit retry loop
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e)
-                if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
+                if 'Sign in to confirm you're not a bot' in msg or 'not a bot' in msg:
                     if attempt < max_retries:
-                        logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, retrying...")
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        wait_time = (2 ** attempt) + (attempt * 2)  # More aggressive backoff
+                        logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
                         continue
                     else:
-                        msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
-                        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
+                        logger.error(f"YouTube anti-bot challenge persisted after {max_retries + 1} attempts")
+                        return jsonify({
+                            'error': 'YouTube is blocking automated requests for this video',
+                            'message': 'This video is temporarily unavailable. Please try again later or use a different video.',
+                            'technical': 'Anti-bot verification required'
+                        }), 503  # Service Unavailable
                 else:
                     # Other download errors, don't retry
                     logger.exception(f"Download error: {e}")
                     return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
             except Exception as e:
                 if attempt < max_retries:
-                    logger.warning(f"Unexpected error on attempt {attempt + 1}, retrying: {e}")
-                    time.sleep(2 ** attempt)
+                    wait_time = 2 ** attempt
+                    logger.warning(f"Unexpected error on attempt {attempt + 1}, waiting {wait_time}s: {e}")
+                    time.sleep(wait_time)
                     continue
                 else:
                     logger.exception(f"Unexpected error in analyze_video: {e}")
@@ -390,18 +407,26 @@ def get_formats():
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'socket_timeout': 60,  # Increased from 30 to 60 seconds
+            'socket_timeout': 60,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['hls', 'dash', 'translated_subs']
+                }
+            },
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
-            
+                'Accept-Encoding': 'gzip, deflate',
             },
             'noplaylist': True,
             'geo_bypass': True,
-            
+            'sleep_interval': 1,
+            'max_sleep_interval': 3,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -490,23 +515,32 @@ def download_video():
         common_opts = {
             'quiet': False,
             'no_warnings': True,
-            'socket_timeout': 120,  # Increased timeout to 2 minutes
-            'retries': 10,  # Increased retries
-            'fragment_retries': 10,  # Increased fragment retries
-            'concurrent_fragment_downloads': 10,  # Increased concurrent downloads
+            'socket_timeout': 120,
+            'retries': 10,
+            'fragment_retries': 10,
+            'concurrent_fragment_downloads': 10,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
             'outtmpl': os.path.join(DOWNLOAD_DIR, f'{safe_filename}_%(title).100s.%(ext)s'),
-            'restrictfilenames': True,  # Restrict filenames to ASCII characters
+            'restrictfilenames': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['hls', 'dash', 'translated_subs']
+                }
+            },
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
                 'Sec-Fetch-Mode': 'navigate',
             },
             'noplaylist': True,
             'geo_bypass': True,
+            'sleep_interval': 2,
+            'max_sleep_interval': 5,
         }
         
         # Configure download options based on quality
