@@ -345,9 +345,9 @@ def analyze_video():
         except Exception as e:
             logger.exception(f"Error processing video info: {e}")
             return jsonify({'error': 'Failed to process video information. Please try again.'}), 500
-            
+    
     except Exception as e:
-        logger.exception(f"Unexpected error in analyze_video: {e}")
+        logger.exception(f"Unexpected error in analyze_video outer handler: {e}")
         return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
 
 @app.route('/api/formats', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
