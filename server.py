@@ -352,7 +352,7 @@ def analyze_video():
             return jsonify(payload)
             
     except yt_dlp.utils.DownloadError as e:
-        logger.error(f"Download error: {e}")
+        logger.exception(f"Download error: {e}")
         msg = str(e)
         # Normalize some common challenge messages
         if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
@@ -363,7 +363,7 @@ def analyze_video():
             msg = 'Video is unavailable or has been removed.'
         return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
     except Exception as e:
-        logger.error(f"Unexpected error in analyze_video: {e}")
+        logger.exception(f"Unexpected error in analyze_video: {e}")
         return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
 
 @app.route('/api/formats', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
@@ -466,7 +466,7 @@ def get_formats():
             return jsonify(payload)
             
     except Exception as e:
-        logger.error(f"Error in get_formats: {e}")
+        logger.exception(f"Error in get_formats: {e}")
         return jsonify({'error': f'Failed to get formats: {str(e)}'}), 500
 
 @app.route('/api/download', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
@@ -584,7 +584,7 @@ def download_video():
             
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        logger.error(f"Download error: {error_msg}")
+        logger.exception(f"Download error: {error_msg}")
         
         # Provide more helpful error messages
         if '403' in error_msg or 'Forbidden' in error_msg:
@@ -598,7 +598,7 @@ def download_video():
             
         return jsonify({'error': f'Download failed: {error_msg}'}), 400
     except Exception as e:
-        logger.error(f"Unexpected error in download_video: {e}")
+        logger.exception(f"Unexpected error in download_video: {e}")
         return jsonify({'error': 'Download failed. Please try again or use a different video.'}), 500
 
 @app.route('/api/download-file/<filename>', methods=['GET'])
@@ -624,7 +624,7 @@ def download_file(filename):
             logger.warning(f"File not found: {safe_filename}")
             return jsonify({'error': 'File not found'}), 404
     except Exception as e:
-        logger.error(f"Error serving file {filename}: {e}")
+        logger.exception(f"Error serving file {filename}: {e}")
         return jsonify({'error': 'Failed to download file'}), 500
 
 # ============================================================================
@@ -656,7 +656,7 @@ def serve_static(path):
             
         return send_from_directory('.', path)
     except Exception as e:
-        logger.error(f"Error serving static file {path}: {e}")
+        logger.exception(f"Error serving static file {path}: {e}")
         return jsonify({'error': 'File not found'}), 404
 
 # ============================================================================
@@ -671,7 +671,7 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     """Handle 500 errors"""
-    logger.error(f"Internal server error: {error}")
+    logger.exception(f"Internal server error: {error}")
     return jsonify({'error': 'Internal server error'}), 500
 
 @app.errorhandler(413)
