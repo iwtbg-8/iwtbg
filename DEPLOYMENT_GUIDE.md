@@ -21,7 +21,7 @@ Deploy backend to **Render.com** (free tier) and frontend to **GitHub Pages**.
 
 3. **Configure Service**
    ```
-   Name: iwtbg-backend
+   Name: iwtbg
    Region: Choose closest to you
    Branch: main
    Runtime: Python 3

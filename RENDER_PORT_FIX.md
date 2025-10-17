@@ -105,7 +105,7 @@ Render.com's web services:
 
 ### Check Render Logs
 1. Go to https://dashboard.render.com
-2. Click on "iwtbg-backend" (or your service name)
+2. Click on "iwtbg" (or your service name)
 3. Click "Logs" tab
 4. Look for:
    - ✅ "Binding to port: 10000"

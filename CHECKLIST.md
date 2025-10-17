@@ -21,7 +21,7 @@
 - Click "New +" → "Web Service"
 - Connect GitHub repository: `iwtbg-8/iwtbg`
 - Fill in:
-  - **Name**: `iwtbg-backend` (or any name)
+  - **Name**: `iwtbg` (or any name)
   - **Build Command**: `pip install -r requirements.txt`
   - **Start Command**: `python server_production.py`
   - **Instance Type**: Free
