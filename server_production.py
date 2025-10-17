@@ -9,6 +9,9 @@ from server import app
 import os
 
 if __name__ == '__main__':
+    # Get port from environment variable (for deployment platforms)
+    port = int(os.environ.get('PORT', 5500))
+    
     # Get download directory
     DOWNLOAD_DIR = os.path.join(os.getcwd(), 'downloads')
     
@@ -16,7 +19,7 @@ if __name__ == '__main__':
     print("🚀 iwtbg - Production Server")
     print("=" * 60)
     print(f"📁 Download directory: {DOWNLOAD_DIR}")
-    print(f"🌐 Server running on: http://localhost:5500")
+    print(f"🌐 Server running on: http://0.0.0.0:{port}")
     print("=" * 60)
     print("\nAvailable endpoints:")
     print("  GET  /                 - Frontend website")
@@ -29,4 +32,4 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop the server\n")
     
     # Run production server
-    serve(app, host='0.0.0.0', port=5500, threads=4)
+    serve(app, host='0.0.0.0', port=port, threads=4)

@@ -26,8 +26,13 @@ app = Flask(__name__, static_folder='.')
 # CORS configuration with more security
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:*", "http://127.0.0.1:*"],
-        "methods": ["GET", "POST"],
+        "origins": [
+            "http://localhost:*", 
+            "http://127.0.0.1:*",
+            "https://iwtbg-8.github.io",  # GitHub Pages domain
+            "https://*.onrender.com"       # Render.com domains
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
 })
