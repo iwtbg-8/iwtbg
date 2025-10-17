@@ -41,12 +41,12 @@ CORS(app, resources={
 })
 
 # Configuration
-MAX_FILESIZE = 500 * 1024 * 1024  # 500MB max file size
+MAX_FILESIZE = 20 * 1024 * 1024 * 1024  # 20GB max file size
 ALLOWED_DOMAINS = []  # Empty means all domains allowed
 DOWNLOAD_DIR = os.path.join(os.getcwd(), 'downloads')
-CACHE_TTL = 6 * 3600  # 6 hours for analyze/formats cache
-RATE_LIMIT_WINDOW = 10 * 60  # 10 minutes
-RATE_LIMIT_MAX = 20  # Max 20 requests per IP per window
+CACHE_TTL = 24 * 3600  # 24 hours cache (increased)
+RATE_LIMIT_WINDOW = 10 * 60  # 10 minutes window (for 1000 requests)
+RATE_LIMIT_MAX = 1000  # Max 1000 requests per IP per 10 minutes (very generous)
 
 # In-memory caches and rate limit storage
 analyze_cache = {}  # url -> (timestamp, data)
@@ -232,9 +232,7 @@ def analyze_video():
         if not is_valid_url(url):
             return jsonify({'error': 'Invalid URL format'}), 400
         
-        # Check URL length to prevent DoS
-        if len(url) > 2048:
-            return jsonify({'error': 'URL too long'}), 400
+        # URL length is now unlimited for flexibility
         
         logger.info(f"Analyzing URL: {url[:100]}... (ip={client_ip})")
 
@@ -251,7 +249,7 @@ def analyze_video():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            'socket_timeout': 30,
+            'socket_timeout': 60,  # Increased from 30 to 60 seconds
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
@@ -259,21 +257,13 @@ def analyze_video():
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web', 'ios'],
-                    'skip': ['dash'],
-                    'player_skip': ['js']
-                }
-            },
             'noplaylist': True,
             'geo_bypass': True,
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
         }
 
         # Retry mechanism for anti-bot issues
-        max_retries = 2
+        max_retries = 5  # Increased from 2 to 5
+        info = None
         for attempt in range(max_retries + 1):
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -290,68 +280,72 @@ def analyze_video():
                         msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
                         return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
                 else:
-                    # Other errors, don't retry
+                    # Other download errors, don't retry
                     logger.exception(f"Download error: {e}")
                     return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
             except Exception as e:
-                logger.exception(f"Unexpected error in analyze_video: {e}")
-                return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
+                if attempt < max_retries:
+                    logger.warning(f"Unexpected error on attempt {attempt + 1}, retrying: {e}")
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    logger.exception(f"Unexpected error in analyze_video: {e}")
+                    return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
 
-        # Process the extracted info
-        # Extract available formats
-        formats = []
-        if 'formats' in info:
-            seen_qualities = set()
-            for f in info['formats']:
-                if f.get('height'):
-                    quality_label = f"{f.get('height')}p"
-                    if quality_label not in seen_qualities:
-                        filesize = f.get('filesize') or f.get('filesize_approx')
-                        formats.append({
-                            'quality': quality_label,
-                            'height': f.get('height'),
-                            'ext': f.get('ext', 'mp4'),
-                            'filesize': filesize,
-                            'format_id': f.get('format_id')
-                        })
-                        seen_qualities.add(quality_label)
-        
-        # Sort formats by quality (highest first)
-        formats.sort(key=lambda x: x['height'], reverse=True)
-        
-        # Sanitize title to prevent XSS
-        title = sanitize_text(info.get('title', 'Unknown Title'))
-        description = sanitize_text(info.get('description', ''))[:200]
-        if description and len(info.get('description', '')) > 200:
-            description += '...'
-        
-        logger.info(f"Successfully analyzed: {title}")
-        
-        payload = {
-            'success': True,
-            'title': title,
-            'thumbnail': info.get('thumbnail', ''),
-            'duration': info.get('duration', 0),
-            'uploader': sanitize_text(info.get('uploader', 'Unknown')),
-            'view_count': info.get('view_count', 0),
-            'formats': formats[:6],  # Return top 6 quality options
-            'description': description
-        }
-        # Store in cache
-        analyze_cache[url] = (time.time(), payload)
-        return jsonify(payload)
+        # Check if we got info after all retries
+        if info is None:
+            return jsonify({'error': 'Failed to analyze video after multiple attempts.'}), 500
+
+        try:
+            # Process the extracted info
+            # Extract available formats
+            formats = []
+            if 'formats' in info and info['formats']:
+                seen_qualities = set()
+                for f in info['formats']:
+                    height = f.get('height')
+                    if height and isinstance(height, int):
+                        quality_label = f"{height}p"
+                        if quality_label not in seen_qualities:
+                            filesize = f.get('filesize') or f.get('filesize_approx')
+                            formats.append({
+                                'quality': quality_label,
+                                'height': height,
+                                'ext': f.get('ext', 'mp4'),
+                                'filesize': filesize,
+                                'format_id': f.get('format_id')
+                            })
+                            seen_qualities.add(quality_label)
             
-    except yt_dlp.utils.DownloadError as e:
-        logger.exception(f"Download error: {e}")
-        msg = str(e)
-        # Normalize some common challenge messages
-        if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
-            msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
-        elif 'Private video' in msg:
-            msg = 'This is a private video and cannot be analyzed.'
-        elif 'Video unavailable' in msg:
-            msg = 'Video is unavailable or has been removed.'
-        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
+            # Sort formats by quality (highest first) - ensure height is valid
+            formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+            
+            # Sanitize title to prevent XSS
+            title = sanitize_text(info.get('title', 'Unknown Title'))
+            description = sanitize_text(info.get('description', ''))[:200]
+            if description and len(info.get('description', '')) > 200:
+                description += '...'
+            
+            logger.info(f"Successfully analyzed: {title}")
+            
+            payload = {
+                'success': True,
+                'title': title,
+                'thumbnail': info.get('thumbnail', ''),
+                'duration': info.get('duration', 0),
+                'uploader': sanitize_text(info.get('uploader', 'Unknown')),
+                'view_count': info.get('view_count', 0),
+                'formats': formats[:6],  # Return top 6 quality options
+                'description': description
+            }
+            # Store in cache
+            analyze_cache[url] = (time.time(), payload)
+            return jsonify(payload)
+            
+        except Exception as e:
+            logger.exception(f"Error processing video info: {e}")
+            return jsonify({'error': 'Failed to process video information. Please try again.'}), 500
+            
     except Exception as e:
         logger.exception(f"Unexpected error in analyze_video: {e}")
         return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
@@ -396,64 +390,62 @@ def get_formats():
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'socket_timeout': 30,
+            'socket_timeout': 60,  # Increased from 30 to 60 seconds
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
-            },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web', 'ios'],
-                    'skip': ['dash'],
-                    'player_skip': ['js']
-                }
+            
             },
             'noplaylist': True,
             'geo_bypass': True,
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
+            
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
-            # Organize formats by quality
-            video_formats = []
-            audio_formats = []
-            
-            for f in info.get('formats', []):
-                format_info = {
-                    'format_id': f.get('format_id'),
-                    'ext': f.get('ext'),
-                    'quality': f.get('format_note', 'Unknown'),
-                    'filesize': f.get('filesize') or f.get('filesize_approx'),
-                    'tbr': f.get('tbr')
-                }
+            try:
+                # Organize formats by quality
+                video_formats = []
+                audio_formats = []
                 
-                if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
-                    format_info['type'] = 'video+audio'
-                    format_info['resolution'] = f"{f.get('height')}p" if f.get('height') else 'Unknown'
-                    video_formats.append(format_info)
-                elif f.get('vcodec') != 'none':
-                    format_info['type'] = 'video'
-                    format_info['resolution'] = f"{f.get('height')}p" if f.get('height') else 'Unknown'
-                    video_formats.append(format_info)
-                elif f.get('acodec') != 'none':
-                    format_info['type'] = 'audio'
-                    format_info['abr'] = f.get('abr')
-                    audio_formats.append(format_info)
-            
-            payload = {
-                'success': True,
-                'video_formats': video_formats,
-                'audio_formats': audio_formats
-            }
-            # Store in cache
-            formats_cache[url] = (time.time(), payload)
-            return jsonify(payload)
+                for f in info.get('formats', []):
+                    format_info = {
+                        'format_id': f.get('format_id'),
+                        'ext': f.get('ext'),
+                        'quality': f.get('format_note', 'Unknown'),
+                        'filesize': f.get('filesize') or f.get('filesize_approx'),
+                        'tbr': f.get('tbr')
+                    }
+                    
+                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                        format_info['type'] = 'video+audio'
+                        format_info['resolution'] = f"{f.get('height')}p" if f.get('height') else 'Unknown'
+                        video_formats.append(format_info)
+                    elif f.get('vcodec') != 'none':
+                        format_info['type'] = 'video'
+                        format_info['resolution'] = f"{f.get('height')}p" if f.get('height') else 'Unknown'
+                        video_formats.append(format_info)
+                    elif f.get('acodec') != 'none':
+                        format_info['type'] = 'audio'
+                        format_info['abr'] = f.get('abr')
+                        audio_formats.append(format_info)
+                
+                payload = {
+                    'success': True,
+                    'video_formats': video_formats,
+                    'audio_formats': audio_formats
+                }
+                # Store in cache
+                formats_cache[url] = (time.time(), payload)
+                return jsonify(payload)
+                
+            except Exception as e:
+                logger.exception(f"Error processing formats: {e}")
+                return jsonify({'error': 'Failed to process video formats. Please try again.'}), 500
             
     except Exception as e:
         logger.exception(f"Error in get_formats: {e}")
@@ -483,8 +475,7 @@ def download_video():
         if not is_valid_url(url):
             return jsonify({'error': 'Invalid URL format'}), 400
         
-        if len(url) > 2048:
-            return jsonify({'error': 'URL too long'}), 400
+        # URL length is now unlimited
         
         # Sanitize quality parameter
         if not re.match(r'^\d+p$|^audio$', quality):
@@ -499,10 +490,10 @@ def download_video():
         common_opts = {
             'quiet': False,
             'no_warnings': True,
-            'socket_timeout': 60,  # Increased timeout
-            'retries': 3,  # Retry failed downloads
-            'fragment_retries': 3,  # Retry failed fragments
-            'concurrent_fragment_downloads': 5,  # Download multiple fragments simultaneously
+            'socket_timeout': 120,  # Increased timeout to 2 minutes
+            'retries': 10,  # Increased retries
+            'fragment_retries': 10,  # Increased fragment retries
+            'concurrent_fragment_downloads': 10,  # Increased concurrent downloads
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
@@ -514,11 +505,8 @@ def download_video():
                 'Accept-Language': 'en-us,en;q=0.5',
                 'Sec-Fetch-Mode': 'navigate',
             },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web'],
-                }
-            },
+            'noplaylist': True,
+            'geo_bypass': True,
         }
         
         # Configure download options based on quality
@@ -698,7 +686,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(f"📁 Download directory: {DOWNLOAD_DIR}")
     print(f"🌐 Server running on: http://localhost:5000")
-    print(f"📊 Max file size: {MAX_FILESIZE / (1024*1024):.0f}MB")
+    print(f"📊 Max file size: {MAX_FILESIZE / (1024*1024*1024):.0f}GB")
     print("=" * 60)
     print("\nAvailable endpoints:")
     print("  GET  /                 - Frontend website")
