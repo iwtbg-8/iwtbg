@@ -246,39 +246,6 @@ def analyze_video():
                 logger.info("Returning cached analysis result")
                 return jsonify(payload)
 
-        # Retry mechanism for anti-bot issues
-        max_retries = 2
-        for attempt in range(max_retries + 1):
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    break  # Success, exit retry loop
-            except yt_dlp.utils.DownloadError as e:
-                msg = str(e)
-                if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
-                    if attempt < max_retries:
-                        logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, retrying...")
-                        time.sleep(2 ** attempt)  # Exponential backoff
-                        continue
-                    else:
-                        msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
-                        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
-                else:
-                    # Other errors, don't retry
-                    logger.error(f"Download error: {e}")
-                    return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
-            except Exception as e:
-                logger.error(f"Unexpected error in analyze_video: {e}")
-                return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
-
-        # Cache check
-        cached = analyze_cache.get(url)
-        if cached:
-            ts, payload = cached
-            if time.time() - ts < CACHE_TTL:
-                logger.info("Returning cached analysis result")
-                return jsonify(payload)
-        
         # yt-dlp options for extracting info only with proper headers
         ydl_opts = {
             'quiet': True,
@@ -304,52 +271,75 @@ def analyze_video():
             'sleep_interval': 1,
             'max_sleep_interval': 5,
         }
+
+        # Retry mechanism for anti-bot issues
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    break  # Success, exit retry loop
+            except yt_dlp.utils.DownloadError as e:
+                msg = str(e)
+                if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
+                    if attempt < max_retries:
+                        logger.warning(f"Anti-bot challenge on attempt {attempt + 1}, retrying...")
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    else:
+                        msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
+                        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
+                else:
+                    # Other errors, don't retry
+                    logger.exception(f"Download error: {e}")
+                    return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
+            except Exception as e:
+                logger.exception(f"Unexpected error in analyze_video: {e}")
+                return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
+
+        # Process the extracted info
+        # Extract available formats
+        formats = []
+        if 'formats' in info:
+            seen_qualities = set()
+            for f in info['formats']:
+                if f.get('height'):
+                    quality_label = f"{f.get('height')}p"
+                    if quality_label not in seen_qualities:
+                        filesize = f.get('filesize') or f.get('filesize_approx')
+                        formats.append({
+                            'quality': quality_label,
+                            'height': f.get('height'),
+                            'ext': f.get('ext', 'mp4'),
+                            'filesize': filesize,
+                            'format_id': f.get('format_id')
+                        })
+                        seen_qualities.add(quality_label)
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            
-            # Extract available formats
-            formats = []
-            if 'formats' in info:
-                seen_qualities = set()
-                for f in info['formats']:
-                    if f.get('height'):
-                        quality_label = f"{f.get('height')}p"
-                        if quality_label not in seen_qualities:
-                            filesize = f.get('filesize') or f.get('filesize_approx')
-                            formats.append({
-                                'quality': quality_label,
-                                'height': f.get('height'),
-                                'ext': f.get('ext', 'mp4'),
-                                'filesize': filesize,
-                                'format_id': f.get('format_id')
-                            })
-                            seen_qualities.add(quality_label)
-            
-            # Sort formats by quality (highest first)
-            formats.sort(key=lambda x: x['height'], reverse=True)
-            
-            # Sanitize title to prevent XSS
-            title = sanitize_text(info.get('title', 'Unknown Title'))
-            description = sanitize_text(info.get('description', ''))[:200]
-            if description and len(info.get('description', '')) > 200:
-                description += '...'
-            
-            logger.info(f"Successfully analyzed: {title}")
-            
-            payload = {
-                'success': True,
-                'title': title,
-                'thumbnail': info.get('thumbnail', ''),
-                'duration': info.get('duration', 0),
-                'uploader': sanitize_text(info.get('uploader', 'Unknown')),
-                'view_count': info.get('view_count', 0),
-                'formats': formats[:6],  # Return top 6 quality options
-                'description': description
-            }
-            # Store in cache
-            analyze_cache[url] = (time.time(), payload)
-            return jsonify(payload)
+        # Sort formats by quality (highest first)
+        formats.sort(key=lambda x: x['height'], reverse=True)
+        
+        # Sanitize title to prevent XSS
+        title = sanitize_text(info.get('title', 'Unknown Title'))
+        description = sanitize_text(info.get('description', ''))[:200]
+        if description and len(info.get('description', '')) > 200:
+            description += '...'
+        
+        logger.info(f"Successfully analyzed: {title}")
+        
+        payload = {
+            'success': True,
+            'title': title,
+            'thumbnail': info.get('thumbnail', ''),
+            'duration': info.get('duration', 0),
+            'uploader': sanitize_text(info.get('uploader', 'Unknown')),
+            'view_count': info.get('view_count', 0),
+            'formats': formats[:6],  # Return top 6 quality options
+            'description': description
+        }
+        # Store in cache
+        analyze_cache[url] = (time.time(), payload)
+        return jsonify(payload)
             
     except yt_dlp.utils.DownloadError as e:
         logger.exception(f"Download error: {e}")

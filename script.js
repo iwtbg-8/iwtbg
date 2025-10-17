@@ -22,6 +22,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const videoDuration = document.getElementById('videoDuration');
     const finalDownloadBtn = document.getElementById('finalDownloadBtn');
 
+    // Mobile Menu Elements
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+    const nav = document.querySelector('.nav');
+
+    // Mobile Menu Toggle
+    function toggleMobileMenu() {
+        const isActive = nav.classList.contains('active');
+        
+        if (isActive) {
+            closeMobileMenu();
+        } else {
+            openMobileMenu();
+        }
+    }
+
+    function openMobileMenu() {
+        nav.classList.add('active');
+        mobileMenuOverlay.classList.add('active');
+        mobileMenuBtn.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileMenu() {
+        nav.classList.remove('active');
+        mobileMenuOverlay.classList.remove('active');
+        mobileMenuBtn.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    // Mobile Menu Event Listeners
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', toggleMobileMenu);
+    }
+
+    if (mobileMenuOverlay) {
+        mobileMenuOverlay.addEventListener('click', closeMobileMenu);
+    }
+
+    // Close mobile menu when clicking nav links
+    document.querySelectorAll('.nav a').forEach(link => {
+        link.addEventListener('click', closeMobileMenu);
+    });
+
+    // Close mobile menu on window resize (if desktop size)
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            closeMobileMenu();
+        }
+    });
+
     // Helper function to safely parse JSON responses
     async function safeJsonParse(response) {
         // Check if response is ok first
@@ -255,9 +306,11 @@ document.addEventListener('DOMContentLoaded', function() {
             option.className = 'quality-option';
             option.innerHTML = `
                 <i class="fas ${quality.icon}"></i>
-                <div class="quality-label">${quality.label}</div>
-                <div class="quality-size">${quality.resolution}</div>
-                <div class="quality-size">${quality.size}</div>
+                <div class="content">
+                    <div class="quality-label">${quality.label}</div>
+                    <div class="quality-size">${quality.resolution}</div>
+                    <div class="quality-size">${quality.size}</div>
+                </div>
             `;
             
             option.addEventListener('click', () => {
@@ -403,15 +456,63 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     document.head.appendChild(style);
 
-    // Add some interactivity on scroll
-    window.addEventListener('scroll', () => {
-        const header = document.querySelector('.header');
-        if (window.scrollY > 50) {
-            header.style.background = 'rgba(15, 23, 42, 0.98)';
-        } else {
-            header.style.background = 'rgba(15, 23, 42, 0.95)';
+    // Mobile Optimizations
+    function initMobileOptimizations() {
+        // Prevent zoom on input focus on iOS
+        const inputs = document.querySelectorAll('input[type="url"]');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                // Add viewport meta tag to prevent zoom
+                const viewport = document.querySelector('meta[name="viewport"]');
+                if (viewport) {
+                    viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                }
+            });
+            
+            input.addEventListener('blur', () => {
+                // Restore normal viewport
+                const viewport = document.querySelector('meta[name="viewport"]');
+                if (viewport) {
+                    viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+                }
+            });
+        });
+
+        // Add touch feedback for buttons
+        const buttons = document.querySelectorAll('button, .quality-option');
+        buttons.forEach(button => {
+            button.addEventListener('touchstart', () => {
+                button.style.transform = 'scale(0.98)';
+            });
+            
+            button.addEventListener('touchend', () => {
+                setTimeout(() => {
+                    button.style.transform = '';
+                }, 150);
+            });
+        });
+
+        // Improve scrolling on mobile
+        if ('scrollBehavior' in document.documentElement.style === false) {
+            // Polyfill for smooth scrolling on older mobile browsers
+            const smoothScroll = (target) => {
+                const element = document.querySelector(target);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            };
+            
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    smoothScroll(this.getAttribute('href'));
+                });
+            });
         }
-    });
+    }
+
+    // Initialize mobile optimizations
+    initMobileOptimizations();
 });
 
 /*
