@@ -76,16 +76,21 @@ Deploy backend to **Render.com** (free tier) and frontend to **GitHub Pages**.
 
 9. **Update server.py CORS**
    
-   In `server.py`, update CORS to allow your GitHub Pages domain:
+   In `server.py`, ensure CORS allows your GitHub Pages domain and Render backend:
    ```python
+   from flask_cors import CORS
+   
    CORS(app, resources={
-       r"/*": {
-           "origins": [
-               "http://localhost:*",
-               "http://127.0.0.1:*",
-               "https://iwtbg-8.github.io"  # Add your GitHub Pages URL
-           ]
-       }
+      r"/api/*": {
+         "origins": [
+            r"https?://localhost(:\\d+)?",
+            r"https?://127\\.0\\.0\\.1(:\\d+)?",
+            r"https://iwtbg-8\\.github\\.io",  # Your GitHub Pages URL
+            r"https://.*\\.onrender\\.com"      # Render subdomains
+         ],
+         "methods": ["GET", "POST", "OPTIONS"],
+         "allow_headers": ["Content-Type"]
+      }
    })
    ```
 

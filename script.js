@@ -5,7 +5,7 @@
 // Use relative URLs when served from same origin, fallback to production backend
 const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
     ? window.location.origin 
-    : 'https://iwtbg.onrender.com';  // Production backend on Render.com
+    : 'https://iwtbg-backend.onrender.com';  // Production backend on Render.com
 
 document.addEventListener('DOMContentLoaded', function() {
     // DOM Elements
@@ -91,6 +91,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Helper: fetch with retry/backoff (helps with Render cold starts and transient 5xx)
+    async function fetchWithRetry(url, options = {}, retries = 3, backoffMs = 1500) {
+        let lastErr;
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+                const resp = await fetch(url, options);
+                // If 5xx, throw to retry
+                if (!resp.ok && resp.status >= 500) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                return resp;
+            } catch (err) {
+                lastErr = err;
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, backoffMs * Math.pow(2, attempt)));
+                    continue;
+                }
+            }
+        }
+        throw lastErr;
+    }
+
     // Download button click handler
     downloadBtn.addEventListener('click', async function() {
         const url = videoUrlInput.value.trim();
@@ -115,14 +137,17 @@ document.addEventListener('DOMContentLoaded', function() {
         animateProgress(0, 100, 2000);
 
         try {
+            // Warm up backend (Render free tier cold start)
+            try { await fetchWithRetry(`${API_URL}/api`, { method: 'GET' }, 1, 500); } catch (_) {}
+
             // Call backend API to analyze video
-            const response = await fetch(`${API_URL}/api/analyze`, {
+            const response = await fetchWithRetry(`${API_URL}/api/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ url: url })
-            });
+            }, 2, 1000);
 
             const data = await safeJsonParse(response);
 
@@ -263,7 +288,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             // Call backend API to download video
-            const response = await fetch(`${API_URL}/api/download`, {
+            const response = await fetchWithRetry(`${API_URL}/api/download`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -272,7 +297,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     url: url,
                     quality: quality.resolution
                 })
-            });
+            }, 2, 1500);
 
             animateProgress(30, 70, 2000);
             const data = await safeJsonParse(response);

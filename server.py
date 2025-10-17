@@ -23,14 +23,15 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='.')
 
-# CORS configuration with more security
+# CORS configuration with more security (allow GH Pages, Render, and local dev)
 CORS(app, resources={
     r"/api/*": {
+        # Use regex patterns for origins to properly match ports/subdomains
         "origins": [
-            "http://localhost:*", 
-            "http://127.0.0.1:*",
-            "https://iwtbg-8.github.io",  # GitHub Pages domain
-            "https://*.onrender.com"       # Render.com domains
+            r"https?://localhost(:\d+)?",
+            r"https?://127\.0\.0\.1(:\d+)?",
+            r"https://iwtbg-8\.github\.io",
+            r"https://.*\.onrender\.com"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
@@ -206,8 +207,18 @@ def analyze_video():
             'extract_flat': False,
             'socket_timeout': 30,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.google.com/',
+            'referer': 'https://www.youtube.com/',
             'nocheckcertificate': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash']
+                }
+            },
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -255,7 +266,15 @@ def analyze_video():
             
     except yt_dlp.utils.DownloadError as e:
         logger.error(f"Download error: {e}")
-        return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
+        msg = str(e)
+        # Normalize some common challenge messages
+        if 'Sign in to confirm you’re not a bot' in msg or 'not a bot' in msg:
+            msg = 'YouTube is requiring additional verification for this video. Try another video or try again later.'
+        elif 'Private video' in msg:
+            msg = 'This is a private video and cannot be analyzed.'
+        elif 'Video unavailable' in msg:
+            msg = 'Video is unavailable or has been removed.'
+        return jsonify({'error': f'Failed to analyze video: {msg}'}), 400
     except Exception as e:
         logger.error(f"Unexpected error in analyze_video: {e}")
         return jsonify({'error': 'Failed to analyze video. Please check the URL and try again.'}), 500
@@ -288,6 +307,19 @@ def get_formats():
             'quiet': True,
             'no_warnings': True,
             'socket_timeout': 30,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
+            'nocheckcertificate': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash']
+                }
+            },
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
