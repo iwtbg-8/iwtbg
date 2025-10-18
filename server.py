@@ -6,6 +6,7 @@ import json
 import re
 import logging
 from urllib.parse import urlparse, quote
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 import hashlib
@@ -47,6 +48,9 @@ DOWNLOAD_DIR = os.path.join(os.getcwd(), 'downloads')
 CACHE_TTL = 24 * 3600  # 24 hours cache (increased)
 RATE_LIMIT_WINDOW = 10 * 60  # 10 minutes window (for 1000 requests)
 RATE_LIMIT_MAX = 1000  # Max 1000 requests per IP per 10 minutes (very generous)
+
+# Timeouts
+ANALYZE_TIMEOUT = 30  # seconds timeout for yt-dlp extract_info calls
 
 # In-memory caches and rate limit storage
 analyze_cache = {}  # url -> (timestamp, data)
@@ -159,6 +163,25 @@ def is_rate_limited(ip):
         return True
     dq.append(now)
     return False
+
+
+def _extract_info_with_ydl(ydl_opts, url, timeout=ANALYZE_TIMEOUT):
+    """Run yt_dlp.extract_info in a thread with a timeout to avoid hangs.
+
+    Returns the infodict on success or raises the underlying exception.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(_run_ydl_extract, ydl_opts, url)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise TimeoutError(f"yt-dlp extract_info timed out after {timeout}s")
+
+
+def _run_ydl_extract(ydl_opts, url):
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        return ydl.extract_info(url, download=False)
 
 # ============================================================================
 # ROUTES
@@ -277,9 +300,9 @@ def analyze_video():
         info = None
         for attempt in range(max_retries + 1):
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    break  # Success, exit retry loop
+                # Use thread-based extraction with timeout to avoid hanging the request
+                info = _extract_info_with_ydl(ydl_opts, url, timeout=ANALYZE_TIMEOUT)
+                break  # Success, exit retry loop
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e)
                 if "Sign in to confirm you're not a bot" in msg or 'not a bot' in msg:
@@ -299,6 +322,16 @@ def analyze_video():
                     # Other download errors, don't retry
                     logger.exception(f"Download error: {e}")
                     return jsonify({'error': f'Failed to analyze video: {str(e)}'}), 400
+            except TimeoutError as e:
+                # Treat extraction timeouts as transient and retry with backoff
+                if attempt < max_retries:
+                    wait_time = (2 ** attempt) + 2
+                    logger.warning(f"Extraction timeout on attempt {attempt + 1}, waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Extraction timed out after {max_retries + 1} attempts: {e}")
+                    return jsonify({'error': 'Video analysis timed out. Please try again later.'}), 504
             except Exception as e:
                 if attempt < max_retries:
                     wait_time = 2 ** attempt
